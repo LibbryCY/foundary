@@ -87,7 +87,7 @@ contract Kickstarter {
         nextId++;
     }
 
-    function vote(uint256 _campaignId, address _voter) public payable {
+    function vote(uint256 _campaignId) public payable {
         // Check if campaign exists
         if (idToCampaign[_campaignId].id == 0) {
             revert NotExists(_campaignId);
@@ -108,14 +108,14 @@ contract Kickstarter {
             revert NotEnoughEth(msg.value);
         }
 
-        votes[_voter][_campaignId] += msg.value;
+        votes[msg.sender][_campaignId] += msg.value;
         idToCampaign[_campaignId].balance += msg.value;
         idToCampaign[_campaignId].numberOfVotes++;
 
-        emit Voted(_campaignId, _voter);
+        emit Voted(_campaignId, msg.sender);
     }
 
-    function unvote(uint256 _campaignId, address _voter) public {
+    function unvote(uint256 _campaignId) public {
         // Check if campaign exists
         if (idToCampaign[_campaignId].id == 0) {
             revert NotExists(_campaignId);
@@ -126,23 +126,22 @@ contract Kickstarter {
             revert ClosedCampaign(_campaignId);
         }
 
-        uint256 amountToUnvote = votes[_voter][_campaignId];
+        uint256 amountToUnvote = votes[msg.sender][_campaignId];
 
         // Check if the voter has voted
         if (amountToUnvote == 0) {
             revert NotEnoughEth(0);
         }
 
-        votes[_voter][_campaignId] = 0;
+        votes[msg.sender][_campaignId] = 0;
         idToCampaign[_campaignId].balance -= amountToUnvote;
+        idToCampaign[_campaignId].numberOfVotes--;
 
-        (bool success, ) = payable(_voter).call{value: amountToUnvote}("");
+        (bool success, ) = payable(msg.sender).call{value: amountToUnvote}("");
         if (!success) {
             revert FailedTransaction();
         }
-        idToCampaign[_campaignId].numberOfVotes--;
-
-        emit Unvoted(_campaignId, _voter);
+        emit Unvoted(_campaignId, msg.sender);
     }
 
     function closeCampaign(
@@ -152,6 +151,10 @@ contract Kickstarter {
         if (idToCampaign[_campaignId].closed) {
             revert ClosedCampaign(_campaignId);
         }
+
+        // Change state
+        idToCampaign[_campaignId].closed = true;
+        idToCampaign[_campaignId].numberOfVotes = 0;
 
         Campaign storage campaign = idToCampaign[_campaignId];
         uint256 amountToTransfer = 0;
@@ -170,9 +173,6 @@ contract Kickstarter {
                 revert FailedTransaction();
             }
         }
-
-        idToCampaign[_campaignId].closed = true;
-        idToCampaign[_campaignId].numberOfVotes = 0;
 
         emit CampaignClosed(_campaignId, msg.sender, amountToTransfer);
     }
