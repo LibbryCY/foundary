@@ -43,13 +43,17 @@ contract Kickstarter {
         uint256 threshold,
         address beneficiary
     );
-    event Voted(uint256 campaignId, address voter);
-    event Unvoted(uint256 campaignId, address voter);
-    event CampaignClosed(
-        uint256 campaignId,
-        address creator,
-        uint256 amountTransferred
+    event Voted(
+        uint256 indexed campaignId,
+        address indexed voter,
+        uint256 amount
     );
+    event Unvoted(
+        uint256 indexed campaignId,
+        address indexed voter,
+        uint256 amount
+    );
+    event CampaignClosed(uint256 indexed campaignId, uint256 amountTransferred);
     event FundsClaimed(address owner, uint256 amountClaimed);
 
     modifier onlyCreator(uint256 _campaignId) {
@@ -112,7 +116,7 @@ contract Kickstarter {
         idToCampaign[_campaignId].balance += msg.value;
         idToCampaign[_campaignId].numberOfVotes++;
 
-        emit Voted(_campaignId, msg.sender);
+        emit Voted(_campaignId, msg.sender, msg.value);
     }
 
     function unvote(uint256 _campaignId) public {
@@ -141,7 +145,7 @@ contract Kickstarter {
         if (!success) {
             revert FailedTransaction();
         }
-        emit Unvoted(_campaignId, msg.sender);
+        emit Unvoted(_campaignId, msg.sender, amountToUnvote);
     }
 
     function closeCampaign(
@@ -174,7 +178,7 @@ contract Kickstarter {
             }
         }
 
-        emit CampaignClosed(_campaignId, msg.sender, amountToTransfer);
+        emit CampaignClosed(_campaignId, amountToTransfer);
     }
 
     function claimFunds() public onlyOwner {
