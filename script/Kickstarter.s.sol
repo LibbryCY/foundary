@@ -16,4 +16,6 @@ contract KickstarterScript is Script {
 
         vm.stopBroadcast();
     }
+
+    function test() public {}
 }

@@ -4,6 +4,16 @@ pragma solidity ^0.8.16;
 // contrac addr: 0x5FbDB2315678afecb367f032d93F642f64180aa3
 // owner addr: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
+struct Campaign {
+    uint256 id;
+    address creator;
+    uint256 threshold;
+    uint256 balance;
+    address beneficiary;
+    uint256 numberOfVotes;
+    bool closed;
+}
+
 contract Kickstarter {
     error NotExists(uint256 campaignId);
     error NotOwner();
@@ -14,21 +24,11 @@ contract Kickstarter {
     error ClosedCampaign(uint256 campaignId);
     error GoalNotReached(uint256 balance, uint256 threshold);
 
-    uint256 nextId = 1;
+    uint256 public nextId = 1;
     address public immutable owner;
 
     constructor() {
         owner = msg.sender;
-    }
-
-    struct Campaign {
-        uint256 id;
-        address creator;
-        uint256 threshold;
-        uint256 balance;
-        address beneficiary;
-        uint256 numberOfVotes;
-        bool closed;
     }
 
     mapping(uint256 => Campaign) public idToCampaign;
@@ -54,14 +54,14 @@ contract Kickstarter {
         uint256 amount
     );
     event CampaignClosed(uint256 indexed campaignId, uint256 amountTransferred);
-    event FundsClaimed(address owner, uint256 amountClaimed);
+    event FundsClaimed(address owner, uint256 campaignId);
 
-    modifier onlyCreator(uint256 _campaignId) {
-        if (idToCampaign[_campaignId].creator != msg.sender) {
-            revert NotCreator();
-        }
-        _;
-    }
+    // modifier onlyCreator(uint256 _campaignId) {
+    //     if (idToCampaign[_campaignId].creator != msg.sender) {
+    //         revert NotCreator();
+    //     }
+    //     _;
+    // }
 
     modifier onlyOwner() {
         if (owner != msg.sender) {
@@ -148,9 +148,17 @@ contract Kickstarter {
         emit Unvoted(_campaignId, msg.sender, amountToUnvote);
     }
 
-    function closeCampaign(
-        uint256 _campaignId
-    ) public onlyCreator(_campaignId) {
+    function closeCampaign(uint256 _campaignId) public {
+        // Check if campaign exists
+        if (idToCampaign[_campaignId].id == 0) {
+            revert NotExists(_campaignId);
+        }
+
+        // Check if the caller is the creator
+        if (msg.sender != idToCampaign[_campaignId].creator) {
+            revert NotCreator();
+        }
+
         // Check if campaign is closed
         if (idToCampaign[_campaignId].closed) {
             revert ClosedCampaign(_campaignId);
@@ -170,7 +178,7 @@ contract Kickstarter {
             amountToTransfer = campaign.balance;
             campaign.balance = 0;
 
-            (bool success, ) = payable(campaign.beneficiary).call{
+            (bool success, ) = payable(address(campaign.beneficiary)).call{
                 value: amountToTransfer
             }("");
             if (!success) {
@@ -189,6 +197,8 @@ contract Kickstarter {
             Campaign storage campaign = idToCampaign[failedCampaigns[i]];
 
             amountClaimed += campaign.balance;
+            emit FundsClaimed(msg.sender, campaign.id);
+
             campaign.balance = 0;
         }
 
@@ -203,14 +213,16 @@ contract Kickstarter {
             if (!success) {
                 revert FailedTransaction();
             }
-
-            emit FundsClaimed(msg.sender, amountClaimed);
         }
     }
 
     function getCampaign(
         uint256 _campaignId
     ) public view returns (Campaign memory) {
+        if (idToCampaign[_campaignId].id == 0) {
+            revert NotExists(_campaignId);
+        }
+
         return idToCampaign[_campaignId];
     }
 
