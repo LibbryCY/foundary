@@ -330,6 +330,20 @@ contract KickstarterTest is Test {
         kickstarter.claimFunds();
     }
 
+    function testClaimFundsNothingToClaim() public {
+        vm.prank(owner);
+        kickstarter.createCampaign(1 ether, owner);
+
+        vm.prank(owner);
+        kickstarter.closeCampaign(1);
+
+        vm.prank(owner);
+        vm.expectRevert(
+            abi.encodeWithSelector(Kickstarter.NothingToClaim.selector)
+        );
+        kickstarter.claimFunds();
+    }
+
     receive() external payable {}
 
     function testClaimFunds() public {
@@ -358,7 +372,7 @@ contract KickstarterTest is Test {
         assertEq(campaign.balance, 0, "Campaign balance should be 0");
         assertEq(
             kickstarter.fundsToClaim(),
-            1 ether,
+            0 ether,
             "Funds to claim should be 0"
         );
     }

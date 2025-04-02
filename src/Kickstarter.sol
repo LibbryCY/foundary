@@ -23,6 +23,7 @@ contract Kickstarter {
     error FailedTransaction();
     error ClosedCampaign(uint256 amount);
     error GoalNotReached(uint256 balance, uint256 threshold);
+    error NothingToClaim();
 
     uint256 public nextId = 1;
     address public immutable owner;
@@ -198,14 +199,18 @@ contract Kickstarter {
     }
 
     function claimFunds() public onlyOwner {
-        if (fundsToClaim > 0) {
-            (bool success, ) = payable(owner).call{value: fundsToClaim}("");
+        uint256 amountToClaim = fundsToClaim;
+        fundsToClaim = 0;
+
+        if (amountToClaim == 0) revert NothingToClaim();
+
+        if (amountToClaim > 0) {
+            (bool success, ) = payable(owner).call{value: amountToClaim}("");
             if (!success) {
                 revert FailedTransaction();
             }
+            emit FundsClaimed(amountToClaim);
         }
-
-        emit FundsClaimed(fundsToClaim);
     }
 
     function getCampaign(
