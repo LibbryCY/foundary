@@ -21,11 +21,12 @@ contract Kickstarter {
     error AlreadyVoted(uint256 campaignId);
     error NotEnoughEth(uint256 amount);
     error FailedTransaction();
-    error ClosedCampaign(uint256 campaignId);
+    error ClosedCampaign(uint256 amount);
     error GoalNotReached(uint256 balance, uint256 threshold);
 
     uint256 public nextId = 1;
     address public immutable owner;
+    uint256 public fundsToClaim = 0;
 
     constructor() {
         owner = msg.sender;
@@ -54,7 +55,7 @@ contract Kickstarter {
         uint256 amount
     );
     event CampaignClosed(uint256 indexed campaignId, uint256 amountTransferred);
-    event FundsClaimed(address owner, uint256 campaignId);
+    event FundsClaimed(uint256 fundsToClaim);
 
     // modifier onlyCreator(uint256 _campaignId) {
     //     if (idToCampaign[_campaignId].creator != msg.sender) {
@@ -116,6 +117,15 @@ contract Kickstarter {
         idToCampaign[_campaignId].balance += msg.value;
         idToCampaign[_campaignId].numberOfVotes++;
 
+        fundsToClaim += msg.value;
+
+        if (
+            idToCampaign[_campaignId].balance >=
+            idToCampaign[_campaignId].threshold
+        ) {
+            closeCampaign(_campaignId);
+        }
+
         emit Voted(_campaignId, msg.sender, msg.value);
     }
 
@@ -141,6 +151,8 @@ contract Kickstarter {
         idToCampaign[_campaignId].balance -= amountToUnvote;
         idToCampaign[_campaignId].numberOfVotes--;
 
+        fundsToClaim -= amountToUnvote;
+
         (bool success, ) = payable(msg.sender).call{value: amountToUnvote}("");
         if (!success) {
             revert FailedTransaction();
@@ -154,11 +166,6 @@ contract Kickstarter {
             revert NotExists(_campaignId);
         }
 
-        // Check if the caller is the creator
-        if (msg.sender != idToCampaign[_campaignId].creator) {
-            revert NotCreator();
-        }
-
         // Check if campaign is closed
         if (idToCampaign[_campaignId].closed) {
             revert ClosedCampaign(_campaignId);
@@ -166,17 +173,18 @@ contract Kickstarter {
 
         // Change state
         idToCampaign[_campaignId].closed = true;
-        idToCampaign[_campaignId].numberOfVotes = 0;
 
         Campaign storage campaign = idToCampaign[_campaignId];
         uint256 amountToTransfer = 0;
 
         // Check if the goal is reached
         if (campaign.balance < campaign.threshold) {
-            failedCampaigns.push(_campaignId);
+            campaign.balance = 0;
         } else {
             amountToTransfer = campaign.balance;
             campaign.balance = 0;
+
+            fundsToClaim -= amountToTransfer;
 
             (bool success, ) = payable(address(campaign.beneficiary)).call{
                 value: amountToTransfer
@@ -190,30 +198,14 @@ contract Kickstarter {
     }
 
     function claimFunds() public onlyOwner {
-        uint256 amountClaimed = 0;
-
-        // Only failed campaigns
-        for (uint256 i = 0; i < failedCampaigns.length; i++) {
-            Campaign storage campaign = idToCampaign[failedCampaigns[i]];
-
-            amountClaimed += campaign.balance;
-            emit FundsClaimed(msg.sender, campaign.id);
-
-            campaign.balance = 0;
-        }
-
-        // Reset array
-        delete failedCampaigns;
-        failedCampaigns = new uint256[](0);
-
-        if (amountClaimed > 0) {
-            (bool success, ) = payable(msg.sender).call{value: amountClaimed}(
-                ""
-            );
+        if (fundsToClaim > 0) {
+            (bool success, ) = payable(owner).call{value: fundsToClaim}("");
             if (!success) {
                 revert FailedTransaction();
             }
         }
+
+        emit FundsClaimed(fundsToClaim);
     }
 
     function getCampaign(
@@ -224,9 +216,5 @@ contract Kickstarter {
         }
 
         return idToCampaign[_campaignId];
-    }
-
-    function getFailedCampaigns() public view returns (uint256[] memory) {
-        return failedCampaigns;
     }
 }
